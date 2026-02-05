@@ -166,7 +166,7 @@ file-analyzer/
 The main `analyze_file` task demonstrates subtask orchestration:
 
 ```python
-@task
+@app.task
 async def analyze_file(file_content: str) -> dict:
     # SUBTASK CALL: Parse CSV data
     parsed_data = await parse_csv_data(file_content)
@@ -204,19 +204,19 @@ async def analyze_file(file_content: str) -> dict:
 The API service demonstrates the complete Client SDK workflow:
 
 ```python
-from render_sdk.client import Client
+from render_sdk import Render
 
-# 1. Get client instance
-client = Client(api_key=os.getenv("RENDER_API_KEY"))
+# 1. Get client instance (uses RENDER_API_KEY env var automatically)
+render = Render()
 
 # 2. Construct task identifier: {service-slug}/{task-name}
 service_slug = os.getenv("WORKFLOW_SERVICE_SLUG")
 task_identifier = f"{service_slug}/analyze_file"
 
-# 3. Call the workflow task with arguments as a list
-task_run = await client.workflows.run_task(
+# 3. Call the workflow task with arguments as a dict
+task_run = await render.workflows.run_task(
     task_identifier,
-    [file_content]  # Arguments as list
+    {"file_content": file_content}
 )
 
 # 4. Await the task completion
@@ -495,17 +495,18 @@ Contains customer information with columns:
 
 **Creating the Client:**
 ```python
-from render_sdk.client import Client
+from render_sdk import Render
 
-client = Client(api_key=os.getenv("RENDER_API_KEY"))
+# Uses RENDER_API_KEY environment variable automatically
+render = Render()
 ```
 
 **Calling Tasks:**
 ```python
-# Format: client.workflows.run_task(task_identifier, [args])
-task_run = await client.workflows.run_task(
+# Format: render.workflows.run_task(task_identifier, {args})
+task_run = await render.workflows.run_task(
     "service-slug/task-name",
-    [arg1, arg2, arg3]  # Arguments as list
+    {"arg1": value1, "arg2": value2}
 )
 
 # Await completion
@@ -521,15 +522,13 @@ print(result.results)  # Return value from task
 
 **Defining Tasks:**
 ```python
-from render_sdk.workflows import start, task
+from render_sdk import Workflows
 
-@task
+app = Workflows(auto_start=True)
+
+@app.task
 def my_task(param: str) -> dict:
     return {"result": param}
-
-# Start the workflow service
-if __name__ == "__main__":
-    start()
 ```
 
 ### 3. Service Separation
@@ -595,7 +594,7 @@ async def analyze_file(file: UploadFile):
 ### Add Webhook Notifications
 
 ```python
-@task
+@app.task
 async def analyze_file(file_content: str, webhook_url: str = None) -> dict:
     # ... perform analysis ...
 
@@ -609,12 +608,12 @@ async def analyze_file(file_content: str, webhook_url: str = None) -> dict:
 ### Add More File Formats
 
 ```python
-@task
+@app.task
 def parse_json_data(file_content: str) -> dict:
     # Parse JSON files
     pass
 
-@task
+@app.task
 def parse_excel_data(file_content: bytes) -> dict:
     # Parse Excel files
     pass
@@ -675,7 +674,7 @@ def parse_excel_data(file_content: bytes) -> dict:
 - **Python-only**: Render Workflows are only supported in Python via `render-sdk`
 - **No Blueprint Support**: Workflows don't support `render.yaml` blueprint configuration
 - **Service Types**: Workflow service (for tasks) vs Web Service (for API)
-- **Task Arguments**: Must be passed as a list: `[arg1, arg2, ...]`
+- **Task Arguments**: Passed as a dict: `{"arg1": value1, "arg2": value2}`
 - **Awaitable Pattern**: Use `await task_run` to wait for completion
 - **Service Slug**: Set correctly in `WORKFLOW_SERVICE_SLUG` environment variable
 - **API Key**: Required in both services, get from Account Settings

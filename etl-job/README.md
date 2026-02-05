@@ -126,21 +126,21 @@ Input:
 Once deployed, trigger the ETL pipeline via the Render API or SDK:
 
 ```python
-from render_sdk.client import Client
+from render_sdk import Render
 
-client = Client(api_key="your_render_api_key")
+# Uses RENDER_API_KEY environment variable automatically
+render = Render()
 
 # Run the ETL pipeline
-task_run = client.workflows.run_task(
-    workflow_service_slug="etl-job-workflows",
-    task_name="run_etl_pipeline",
-    input="sample_data.csv"
+task_run = await render.workflows.run_task(
+    "etl-job-workflows/run_etl_pipeline",
+    {"source_file": "sample_data.csv"}
 )
 
 # Wait for completion
 result = await task_run
-print(f"Pipeline status: {result['status']}")
-print(f"Valid records: {result['transform']['valid_count']}")
+print(f"Pipeline status: {result.results['status']}")
+print(f"Valid records: {result.results['transform']['valid_count']}")
 ```
 
 ## Sample Data
@@ -187,7 +187,7 @@ This demonstrates **sequential subtask orchestration** for multi-stage pipelines
 
 **Add Database Loading**:
 ```python
-@task
+@app.task
 async def load_to_database(records: list[dict]) -> dict:
     # Connect to database
     # Insert records
@@ -197,7 +197,7 @@ async def load_to_database(records: list[dict]) -> dict:
 
 **Add API Data Source**:
 ```python
-@task
+@app.task
 async def extract_from_api(api_url: str) -> list[dict]:
     # Fetch from REST API
     # Parse JSON response
@@ -209,7 +209,7 @@ async def extract_from_api(api_url: str) -> list[dict]:
 ```python
 import asyncio
 
-@task
+@app.task
 async def transform_batch_parallel(records: list[dict]) -> dict:
     # Validate all records in parallel
     tasks = [validate_record(record) for record in records]

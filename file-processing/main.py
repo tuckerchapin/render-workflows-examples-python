@@ -19,9 +19,8 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
-from render_sdk.workflows import Options, Retry, start, task
+from render_sdk import Retry, Workflows
 
 # Configure logging
 logging.basicConfig(
@@ -30,12 +29,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Initialize Workflows app with defaults
+app = Workflows(
+    default_retry=Retry(max_retries=3, wait_duration_ms=1000, backoff_scaling=1.5),
+    default_timeout=300,
+    auto_start=True,
+)
+
 
 # ============================================================================
 # File Reading Tasks
 # ============================================================================
 
-@task(options=Options(retry=Retry(max_retries=3, wait_duration_ms=1000)))
+@app.task
 def read_csv_file(file_path: str) -> dict:
     """
     Read and parse a CSV file.
@@ -83,7 +89,7 @@ def read_csv_file(file_path: str) -> dict:
         }
 
 
-@task(options=Options(retry=Retry(max_retries=3, wait_duration_ms=1000)))
+@app.task
 def read_json_file(file_path: str) -> dict:
     """
     Read and parse a JSON file.
@@ -109,7 +115,7 @@ def read_json_file(file_path: str) -> dict:
         with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
 
-        logger.info(f"[JSON] Successfully parsed JSON")
+        logger.info("[JSON] Successfully parsed JSON")
 
         return {
             "success": True,
@@ -128,7 +134,7 @@ def read_json_file(file_path: str) -> dict:
         }
 
 
-@task(options=Options(retry=Retry(max_retries=3, wait_duration_ms=1000)))
+@app.task
 def read_text_file(file_path: str) -> dict:
     """
     Read and analyze a text file.
@@ -183,7 +189,7 @@ def read_text_file(file_path: str) -> dict:
 # Analysis Tasks
 # ============================================================================
 
-@task
+@app.task
 def analyze_csv_data(csv_result: dict) -> dict:
     """
     Analyze CSV data and extract insights.
@@ -241,7 +247,7 @@ def analyze_csv_data(csv_result: dict) -> dict:
     return analysis
 
 
-@task
+@app.task
 def analyze_json_structure(json_result: dict) -> dict:
     """
     Analyze JSON structure and extract metadata.
@@ -284,7 +290,7 @@ def analyze_json_structure(json_result: dict) -> dict:
     return analysis
 
 
-@task
+@app.task
 def analyze_text_content(text_result: dict) -> dict:
     """
     Analyze text content for insights.
@@ -339,7 +345,7 @@ def analyze_text_content(text_result: dict) -> dict:
 # Orchestration Tasks
 # ============================================================================
 
-@task
+@app.task
 async def process_single_file(file_path: str) -> dict:
     """
     Process a single file based on its extension.
@@ -392,7 +398,7 @@ async def process_single_file(file_path: str) -> dict:
     }
 
 
-@task
+@app.task
 async def process_file_batch(*file_paths: str) -> dict:
     """
     Process multiple files in parallel.
@@ -432,25 +438,25 @@ async def process_file_batch(*file_paths: str) -> dict:
         file_types[file_type] = file_types.get(file_type, 0) + 1
 
     batch_result = {
-        "total_files": len(file_paths),
+        "total_files": len(file_paths_list),
         "successful": len(successful),
         "failed": len(failed),
-        "success_rate": len(successful) / len(file_paths) if file_paths else 0,
+        "success_rate": len(successful) / len(file_paths_list) if file_paths_list else 0,
         "file_types": file_types,
         "results": results,
         "processed_at": datetime.now().isoformat()
     }
 
     logger.info("=" * 80)
-    logger.info(f"[BATCH] Batch processing complete!")
-    logger.info(f"[BATCH] Successful: {len(successful)}/{len(file_paths)}")
+    logger.info("[BATCH] Batch processing complete!")
+    logger.info(f"[BATCH] Successful: {len(successful)}/{len(file_paths_list)}")
     logger.info(f"[BATCH] File types: {file_types}")
     logger.info("=" * 80)
 
     return batch_result
 
 
-@task
+@app.task
 async def generate_consolidated_report(batch_result: dict) -> dict:
     """
     Generate a consolidated report from batch processing results.
@@ -506,8 +512,3 @@ async def generate_consolidated_report(batch_result: dict) -> dict:
                f"JSON keys: {total_json_keys}")
 
     return report
-
-
-if __name__ == "__main__":
-    logger.info("Starting File Processing Workflow Service")
-    start()

@@ -17,9 +17,8 @@ import json
 import logging
 import os
 from datetime import datetime
-from typing import Any
 
-from render_sdk.workflows import Options, Retry, start, task
+from render_sdk import Retry, Workflows
 
 # Configure logging
 logging.basicConfig(
@@ -64,11 +63,19 @@ def get_openai_client():
     return _openai_client
 
 
+# Initialize Workflows app with defaults
+app = Workflows(
+    default_retry=Retry(max_retries=3, wait_duration_ms=2000, backoff_scaling=2.0),
+    default_timeout=300,
+    auto_start=True,
+)
+
+
 # ============================================================================
 # Tool Functions - Actions the agent can perform
 # ============================================================================
 
-@task
+@app.task
 def get_order_status(order_id: str) -> dict:
     """
     Tool: Look up order status.
@@ -107,7 +114,7 @@ def get_order_status(order_id: str) -> dict:
         }
 
 
-@task
+@app.task
 def process_refund(order_id: str, reason: str) -> dict:
     """
     Tool: Process a refund for an order.
@@ -140,7 +147,7 @@ def process_refund(order_id: str, reason: str) -> dict:
     return result
 
 
-@task
+@app.task
 def search_knowledge_base(query: str) -> dict:
     """
     Tool: Search the knowledge base for information.
@@ -193,7 +200,7 @@ def search_knowledge_base(query: str) -> dict:
 # Agent Tasks
 # ============================================================================
 
-@task(options=Options(retry=Retry(max_retries=3, wait_duration_ms=2000, factor=2.0)))
+@app.task
 async def call_llm_with_tools(
     messages: list[dict],
     tools: list[dict],
@@ -252,7 +259,7 @@ async def call_llm_with_tools(
         raise
 
 
-@task
+@app.task
 async def execute_tool(tool_name: str, arguments: dict) -> dict:
     """
     Execute a tool function by name.
@@ -305,7 +312,7 @@ async def execute_tool(tool_name: str, arguments: dict) -> dict:
         return {"error": str(e)}
 
 
-@task
+@app.task
 async def agent_turn(
     user_message: str,
     conversation_history: list[dict] = None
@@ -475,7 +482,7 @@ async def agent_turn(
     }
 
 
-@task
+@app.task
 async def multi_turn_conversation(*messages: str) -> dict:
     """
     Run a multi-turn conversation with the agent.
@@ -523,8 +530,3 @@ async def multi_turn_conversation(*messages: str) -> dict:
         "total_turns": len(responses),
         "conversation_history": conversation_history
     }
-
-
-if __name__ == "__main__":
-    logger.info("Starting OpenAI Agent Workflow Service")
-    start()

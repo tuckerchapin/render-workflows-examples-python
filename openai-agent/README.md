@@ -197,28 +197,27 @@ This will process all messages in sequence, maintaining context between turns.
 Once deployed, interact with the agent via the Render API or SDK:
 
 ```python
-from render_sdk.client import Client
+from render_sdk import Render
 
-client = Client(api_key="your_render_api_key")
+# Uses RENDER_API_KEY environment variable automatically
+render = Render()
 
 # Single turn conversation
-task_run = client.workflows.run_task(
-    workflow_service_slug="openai-agent-workflows",
-    task_name="agent_turn",
-    input={
+task_run = await render.workflows.run_task(
+    "openai-agent-workflows/agent_turn",
+    {
         "user_message": "What is the status of order ORD-001?",
         "conversation_history": []
     }
 )
 
 result = await task_run
-print(f"Agent: {result['response']}")
+print(f"Agent: {result.results['response']}")
 
 # Multi-turn conversation
-task_run = client.workflows.run_task(
-    workflow_service_slug="openai-agent-workflows",
-    task_name="multi_turn_conversation",
-    input={
+task_run = await render.workflows.run_task(
+    "openai-agent-workflows/multi_turn_conversation",
+    {
         "messages": [
             "What is your return policy?",
             "What is the status of order ORD-001?",
@@ -228,7 +227,7 @@ task_run = client.workflows.run_task(
 )
 
 result = await task_run
-for turn in result['turns']:
+for turn in result.results['turns']:
     print(f"User: {turn['user']}")
     print(f"Agent: {turn['assistant']}")
     print(f"Tools used: {[t['tool'] for t in turn['tool_calls']]}")
@@ -274,7 +273,7 @@ Searches the knowledge base for information.
 
 **`execute_tool`**: Dynamically executes a tool as a subtask based on the agent's decision:
 ```python
-@task
+@app.task
 async def execute_tool(tool_name: str, arguments: dict) -> dict:
     # Map tool names to tasks
     tool_map = {
@@ -310,7 +309,7 @@ To add a new tool capability:
 
 1. **Define the tool function**:
 ```python
-@task
+@app.task
 def new_tool(param: str) -> dict:
     """Tool: Description of what this tool does."""
     # Implementation

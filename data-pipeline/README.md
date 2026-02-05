@@ -179,23 +179,21 @@ Input:
 Once deployed, trigger the pipeline via the Render API or SDK:
 
 ```python
-from render_sdk.client import Client
+from render_sdk import Render
 
-client = Client(api_key="your_render_api_key")
+# Uses RENDER_API_KEY environment variable automatically
+render = Render()
 
 # Run the complete pipeline
-task_run = client.workflows.run_task(
-    workflow_service_slug="data-pipeline-workflows",
-    task_name="run_data_pipeline",
-    input={
-        "user_ids": ["user_1", "user_2", "user_3", "user_4"]
-    }
+task_run = await render.workflows.run_task(
+    "data-pipeline-workflows/run_data_pipeline",
+    {"user_ids": ["user_1", "user_2", "user_3", "user_4"]}
 )
 
 result = await task_run
-print(f"Pipeline status: {result['status']}")
-print(f"Total revenue: ${result['insights']['revenue']['total']}")
-print(f"Segment distribution: {result['insights']['segment_distribution']}")
+print(f"Pipeline status: {result.results['status']}")
+print(f"Total revenue: ${result.results['insights']['revenue']['total']}")
+print(f"Segment distribution: {result.results['segment_distribution']}")
 ```
 
 ## Pipeline Stages
@@ -328,7 +326,7 @@ Business logic classifies users into segments:
 
 **Add Real APIs**:
 ```python
-@task
+@app.task
 async def fetch_user_data_from_api(user_ids: list[str]) -> dict:
     client = get_http_client()
     response = await client.post(
@@ -340,7 +338,7 @@ async def fetch_user_data_from_api(user_ids: list[str]) -> dict:
 
 **Add Database Integration**:
 ```python
-@task
+@app.task
 async def load_to_warehouse(insights: dict) -> dict:
     # Connect to data warehouse (Snowflake, BigQuery, etc.)
     # Insert aggregated insights
@@ -350,7 +348,7 @@ async def load_to_warehouse(insights: dict) -> dict:
 
 **Add Caching**:
 ```python
-@task
+@app.task
 async def fetch_with_cache(source: str, key: str) -> dict:
     # Check Redis/Memcached
     # If miss, fetch from source and cache
@@ -360,7 +358,7 @@ async def fetch_with_cache(source: str, key: str) -> dict:
 
 **Add Notifications**:
 ```python
-@task
+@app.task
 async def send_pipeline_notification(result: dict) -> dict:
     # Send to Slack, email, etc.
     # Notify stakeholders of pipeline completion

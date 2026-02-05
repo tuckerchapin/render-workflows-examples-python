@@ -16,8 +16,8 @@ import logging
 from typing import Any
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from render_sdk.client import Client
-from render_sdk.client.errors import RenderError
+from render_sdk import Render
+from render_sdk.client.errors import RenderError, TaskRunError
 from pydantic import BaseModel
 
 # Configure logging
@@ -62,7 +62,7 @@ class HealthResponse(BaseModel):
 
 
 # Client SDK helper functions
-def get_client() -> Client:
+def get_client() -> Render:
     """
     Get Render API client.
 
@@ -76,7 +76,7 @@ def get_client() -> Client:
             status_code=500,
             detail="RENDER_API_KEY not configured. Get your API key from Render Dashboard → Account Settings → API Keys"
         )
-    return Client(api_key)
+    return Render()  # Uses RENDER_API_KEY env var automatically
 
 
 def get_task_identifier(task_name: str) -> str:
@@ -192,19 +192,19 @@ async def analyze_file(file: UploadFile = File(...)):
         logger.info(f"Calling workflow task: {task_identifier}")
 
         # CLIENT SDK CALL: Run the workflow task
-        # Format: client.workflows.run_task(task_identifier, [arg1, arg2, ...])
-        # Arguments must be passed as a list
+        # Format: client.workflows.run_task(task_identifier, {"arg": value})
         task_run = await client.workflows.run_task(
             task_identifier,
-            [file_content_str]  # Pass file content as first argument
+            {"file_content": file_content_str}
         )
+
+        logger.info(f"Task started: {task_run.id}")
 
         # CLIENT SDK CALL: Await the task completion
         # This will block until the task finishes
         result = await task_run
 
         logger.info(f"Task completed with status: {result.status}")
-        logger.info(f"Task run ID: {result.id}")
 
         return AnalysisResponse(
             task_run_id=result.id,
@@ -213,11 +213,17 @@ async def analyze_file(file: UploadFile = File(...)):
             result=result.results  # Task return value
         )
 
+    except TaskRunError as e:
+        logger.error(f"Task run error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Workflow task failed: {str(e)}"
+        )
     except RenderError as e:
         logger.error(f"Render API error: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Workflow task failed: {str(e)}"
+            detail=f"Render API error: {str(e)}"
         )
     except UnicodeDecodeError:
         logger.error("File encoding error")
@@ -278,8 +284,10 @@ async def analyze_with_custom_task(task_name: str, file: UploadFile = File(...))
         # CLIENT SDK CALL: Run the specified workflow task
         task_run = await client.workflows.run_task(
             task_identifier,
-            [file_content_str]
+            {"file_content": file_content_str}
         )
+
+        logger.info(f"Task started: {task_run.id}")
 
         # CLIENT SDK CALL: Await the task completion
         result = await task_run
@@ -293,11 +301,17 @@ async def analyze_with_custom_task(task_name: str, file: UploadFile = File(...))
             result=result.results
         )
 
+    except TaskRunError as e:
+        logger.error(f"Task run error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Workflow task '{task_name}' failed: {str(e)}"
+        )
     except RenderError as e:
         logger.error(f"Render API error: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Workflow task '{task_name}' failed: {str(e)}"
+            detail=f"Render API error: {str(e)}"
         )
     except Exception as e:
         logger.error(f"Unexpected error: {e}")

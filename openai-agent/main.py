@@ -17,58 +17,59 @@ import json
 import logging
 import os
 from datetime import datetime
-from typing import Any
 
-from render_sdk.workflows import Options, Retry, start, task
+from render_sdk import Retry, Workflows
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
 # OpenAI client initialization
-_openai_client = None
 _openai_import_error = None
 
 try:
     from openai import AsyncOpenAI
 except ImportError as e:
     _openai_import_error = e
-    logger.warning(
-        "OpenAI package not installed. Install with: pip install openai"
-    )
+    logger.warning("OpenAI package not installed. Install with: pip install openai")
 
 
-def get_openai_client():
-    """Get or initialize the OpenAI client."""
-    global _openai_client
+def create_openai_client() -> "AsyncOpenAI":
+    """Create a new OpenAI client instance.
 
+    Creates a fresh client each time to avoid atexit registration issues
+    that can occur with global async clients in workflow environments.
+    """
     if _openai_import_error:
         raise ImportError(
             "OpenAI package not installed. Install with: pip install openai"
         ) from _openai_import_error
 
-    if _openai_client is None:
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise ValueError(
-                "OPENAI_API_KEY environment variable not set. "
-                "Please set it in your Render environment variables."
-            )
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise ValueError(
+            "OPENAI_API_KEY environment variable not set. "
+            "Please set it in your Render environment variables."
+        )
 
-        _openai_client = AsyncOpenAI(api_key=api_key)
-        logger.info("OpenAI client initialized successfully")
+    return AsyncOpenAI(api_key=api_key)
 
-    return _openai_client
+
+# Initialize Workflows app with defaults
+app = Workflows(
+    default_retry=Retry(max_retries=3, wait_duration_ms=2000, backoff_scaling=2.0),
+    default_timeout=300,
+)
 
 
 # ============================================================================
 # Tool Functions - Actions the agent can perform
 # ============================================================================
 
-@task
+
+@app.task
 def get_order_status(order_id: str) -> dict:
     """
     Tool: Look up order status.
@@ -85,29 +86,29 @@ def get_order_status(order_id: str) -> dict:
 
     # Simulated database lookup
     mock_orders = {
-        "ORD-001": {"status": "shipped", "tracking": "1Z999AA1234567890", "eta": "2024-10-15"},
+        "ORD-001": {
+            "status": "shipped",
+            "tracking": "1Z999AA1234567890",
+            "eta": "2024-10-15",
+        },
         "ORD-002": {"status": "processing", "tracking": None, "eta": "2024-10-12"},
-        "ORD-003": {"status": "delivered", "tracking": "1Z999AA9876543210", "eta": "2024-10-08"},
+        "ORD-003": {
+            "status": "delivered",
+            "tracking": "1Z999AA9876543210",
+            "eta": "2024-10-08",
+        },
     }
 
     if order_id in mock_orders:
         result = mock_orders[order_id]
         logger.info(f"[TOOL] Order {order_id} found: {result['status']}")
-        return {
-            "success": True,
-            "order_id": order_id,
-            **result
-        }
+        return {"success": True, "order_id": order_id, **result}
     else:
         logger.warning(f"[TOOL] Order {order_id} not found")
-        return {
-            "success": False,
-            "order_id": order_id,
-            "error": "Order not found"
-        }
+        return {"success": False, "order_id": order_id, "error": "Order not found"}
 
 
-@task
+@app.task
 def process_refund(order_id: str, reason: str) -> dict:
     """
     Tool: Process a refund for an order.
@@ -133,14 +134,14 @@ def process_refund(order_id: str, reason: str) -> dict:
         "order_id": order_id,
         "reason": reason,
         "amount": 99.99,  # Mock amount
-        "processed_at": datetime.now().isoformat()
+        "processed_at": datetime.now().isoformat(),
     }
 
     logger.info(f"[TOOL] Refund processed: {refund_id}")
     return result
 
 
-@task
+@app.task
 def search_knowledge_base(query: str) -> dict:
     """
     Tool: Search the knowledge base for information.
@@ -159,16 +160,16 @@ def search_knowledge_base(query: str) -> dict:
     knowledge = {
         "shipping": {
             "title": "Shipping Policy",
-            "content": "We offer free shipping on orders over $50. Standard shipping takes 3-5 business days. Express shipping is available for $15 and takes 1-2 business days."
+            "content": "We offer free shipping on orders over $50. Standard shipping takes 3-5 business days. Express shipping is available for $15 and takes 1-2 business days.",
         },
         "returns": {
             "title": "Return Policy",
-            "content": "We accept returns within 30 days of purchase. Items must be unused and in original packaging. Refunds are processed within 5-7 business days."
+            "content": "We accept returns within 30 days of purchase. Items must be unused and in original packaging. Refunds are processed within 5-7 business days.",
         },
         "warranty": {
             "title": "Warranty Information",
-            "content": "All products come with a 1-year manufacturer warranty. Extended warranties are available for purchase."
-        }
+            "content": "All products come with a 1-year manufacturer warranty. Extended warranties are available for purchase.",
+        },
     }
 
     # Simple keyword matching
@@ -176,28 +177,24 @@ def search_knowledge_base(query: str) -> dict:
     matches = []
 
     for key, article in knowledge.items():
-        if key in query_lower or any(word in article['content'].lower() for word in query_lower.split()):
+        if key in query_lower or any(
+            word in article["content"].lower() for word in query_lower.split()
+        ):
             matches.append(article)
 
     logger.info(f"[TOOL] Found {len(matches)} knowledge base articles")
 
-    return {
-        "success": True,
-        "query": query,
-        "results": matches,
-        "count": len(matches)
-    }
+    return {"success": True, "query": query, "results": matches, "count": len(matches)}
 
 
 # ============================================================================
 # Agent Tasks
 # ============================================================================
 
-@task(options=Options(retry=Retry(max_retries=3, wait_duration_ms=2000, factor=2.0)))
+
+@app.task
 async def call_llm_with_tools(
-    messages: list[dict],
-    tools: list[dict],
-    model: str = "gpt-4"
+    messages: list[dict], tools: list[dict], model: str = "gpt-4"
 ) -> dict:
     """
     Call OpenAI with function/tool definitions.
@@ -215,21 +212,15 @@ async def call_llm_with_tools(
     """
     logger.info(f"[AGENT] Calling {model} with {len(tools)} tools available")
 
-    client = get_openai_client()
+    client = create_openai_client()
 
     try:
         response = await client.chat.completions.create(
-            model=model,
-            messages=messages,
-            tools=tools,
-            tool_choice="auto"
+            model=model, messages=messages, tools=tools, tool_choice="auto"
         )
 
         message = response.choices[0].message
-        result = {
-            "content": message.content,
-            "tool_calls": []
-        }
+        result = {"content": message.content, "tool_calls": []}
 
         if message.tool_calls:
             result["tool_calls"] = [
@@ -238,21 +229,25 @@ async def call_llm_with_tools(
                     "type": "function",
                     "function": {
                         "name": tc.function.name,
-                        "arguments": tc.function.arguments
-                    }
+                        "arguments": tc.function.arguments,
+                    },
                 }
                 for tc in message.tool_calls
             ]
-            logger.info(f"[AGENT] Model requested {len(result['tool_calls'])} tool calls")
+            logger.info(
+                f"[AGENT] Model requested {len(result['tool_calls'])} tool calls"
+            )
 
         return result
 
     except Exception as e:
         logger.error(f"[AGENT] LLM call failed: {e}")
         raise
+    finally:
+        await client.close()
 
 
-@task
+@app.task
 async def execute_tool(tool_name: str, arguments: dict) -> dict:
     """
     Execute a tool function by name.
@@ -273,7 +268,7 @@ async def execute_tool(tool_name: str, arguments: dict) -> dict:
     tool_map = {
         "get_order_status": get_order_status,
         "process_refund": process_refund,
-        "search_knowledge_base": search_knowledge_base
+        "search_knowledge_base": search_knowledge_base,
     }
 
     if tool_name not in tool_map:
@@ -289,8 +284,7 @@ async def execute_tool(tool_name: str, arguments: dict) -> dict:
             result = await tool_function(arguments.get("order_id"))
         elif tool_name == "process_refund":
             result = await tool_function(
-                arguments.get("order_id"),
-                arguments.get("reason")
+                arguments.get("order_id"), arguments.get("reason")
             )
         elif tool_name == "search_knowledge_base":
             result = await tool_function(arguments.get("query"))
@@ -305,10 +299,9 @@ async def execute_tool(tool_name: str, arguments: dict) -> dict:
         return {"error": str(e)}
 
 
-@task
+@app.task
 async def agent_turn(
-    user_message: str,
-    conversation_history: list[dict] = None
+    user_message: str, conversation_history: list[dict] = None
 ) -> dict:
     """
     Execute a single agent turn with tool calling capability.
@@ -326,16 +319,18 @@ async def agent_turn(
         Dictionary with agent response and updated history
     """
     logger.info("[AGENT TURN] Starting agent turn")
-    
+
     # Handle case where user_message might be a slice object or other type
     if isinstance(user_message, str):
         logger.info(f"[AGENT TURN] User message: {user_message[:100]}...")
     else:
-        logger.error(f"[AGENT TURN] Invalid user_message type: {type(user_message)}, value: {user_message}")
+        logger.error(
+            f"[AGENT TURN] Invalid user_message type: {type(user_message)}, value: {user_message}"
+        )
         return {
             "success": False,
             "error": f"user_message must be a string, got {type(user_message)}",
-            "response": "I'm sorry, there was an error processing your message. Please try again."
+            "response": "I'm sorry, there was an error processing your message. Please try again.",
         }
 
     if conversation_history is None:
@@ -353,12 +348,12 @@ async def agent_turn(
                     "properties": {
                         "order_id": {
                             "type": "string",
-                            "description": "The order ID (e.g., ORD-001)"
+                            "description": "The order ID (e.g., ORD-001)",
                         }
                     },
-                    "required": ["order_id"]
-                }
-            }
+                    "required": ["order_id"],
+                },
+            },
         },
         {
             "type": "function",
@@ -370,16 +365,16 @@ async def agent_turn(
                     "properties": {
                         "order_id": {
                             "type": "string",
-                            "description": "The order ID to refund"
+                            "description": "The order ID to refund",
                         },
                         "reason": {
                             "type": "string",
-                            "description": "Reason for the refund"
-                        }
+                            "description": "Reason for the refund",
+                        },
                     },
-                    "required": ["order_id", "reason"]
-                }
-            }
+                    "required": ["order_id", "reason"],
+                },
+            },
         },
         {
             "type": "function",
@@ -389,15 +384,12 @@ async def agent_turn(
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": "The search query"
-                        }
+                        "query": {"type": "string", "description": "The search query"}
                     },
-                    "required": ["query"]
-                }
-            }
-        }
+                    "required": ["query"],
+                },
+            },
+        },
     ]
 
     # System prompt
@@ -408,13 +400,15 @@ async def agent_turn(
             "status, process refunds, and search the knowledge base for information. "
             "Be polite, professional, and helpful. Use tools when necessary to "
             "assist the customer."
-        )
+        ),
     }
 
     # Build messages
-    messages = [system_message] + conversation_history + [
-        {"role": "user", "content": user_message}
-    ]
+    messages = (
+        [system_message]
+        + conversation_history
+        + [{"role": "user", "content": user_message}]
+    )
 
     # Call LLM
     llm_response = await call_llm_with_tools(messages, tools)
@@ -424,11 +418,12 @@ async def agent_turn(
         logger.info("[AGENT TURN] No tool calls, returning response")
         return {
             "response": llm_response["content"],
-            "conversation_history": conversation_history + [
+            "conversation_history": conversation_history
+            + [
                 {"role": "user", "content": user_message},
-                {"role": "assistant", "content": llm_response["content"]}
+                {"role": "assistant", "content": llm_response["content"]},
             ],
-            "tool_calls": []
+            "tool_calls": [],
         }
 
     # Execute tool calls
@@ -438,27 +433,24 @@ async def agent_turn(
     for tool_call in llm_response["tool_calls"]:
         result = await execute_tool(
             tool_call["function"]["name"],
-            json.loads(tool_call["function"]["arguments"])
+            json.loads(tool_call["function"]["arguments"]),
         )
-        tool_results.append({
-            "tool": tool_call["function"]["name"],
-            "result": result
-        })
+        tool_results.append({"tool": tool_call["function"]["name"], "result": result})
 
     # Format tool results for LLM
     tool_messages = [
-        {
-            "role": "tool",
-            "tool_call_id": tc["id"],
-            "content": json.dumps(tr["result"])
-        }
+        {"role": "tool", "tool_call_id": tc["id"], "content": json.dumps(tr["result"])}
         for tc, tr in zip(llm_response["tool_calls"], tool_results)
     ]
 
     # Get final response from LLM with tool results
     final_messages = messages + [
-        {"role": "assistant", "content": llm_response.get("content"), "tool_calls": llm_response["tool_calls"]},
-        *tool_messages
+        {
+            "role": "assistant",
+            "content": llm_response.get("content"),
+            "tool_calls": llm_response["tool_calls"],
+        },
+        *tool_messages,
     ]
 
     final_response = await call_llm_with_tools(final_messages, tools)
@@ -467,15 +459,16 @@ async def agent_turn(
 
     return {
         "response": final_response["content"],
-        "conversation_history": conversation_history + [
+        "conversation_history": conversation_history
+        + [
             {"role": "user", "content": user_message},
-            {"role": "assistant", "content": final_response["content"]}
+            {"role": "assistant", "content": final_response["content"]},
         ],
-        "tool_calls": tool_results
+        "tool_calls": tool_results,
     }
 
 
-@task
+@app.task
 async def multi_turn_conversation(*messages: str) -> dict:
     """
     Run a multi-turn conversation with the agent.
@@ -491,9 +484,11 @@ async def multi_turn_conversation(*messages: str) -> dict:
     """
     # Convert to list for easier handling
     messages_list = list(messages)
-    
+
     logger.info("=" * 80)
-    logger.info(f"[CONVERSATION] Starting multi-turn conversation with {len(messages_list)} messages")
+    logger.info(
+        f"[CONVERSATION] Starting multi-turn conversation with {len(messages_list)} messages"
+    )
     logger.info("=" * 80)
 
     conversation_history = []
@@ -504,12 +499,14 @@ async def multi_turn_conversation(*messages: str) -> dict:
 
         turn_result = await agent_turn(user_message, conversation_history)
 
-        responses.append({
-            "turn": i,
-            "user": user_message,
-            "assistant": turn_result["response"],
-            "tool_calls": turn_result.get("tool_calls", [])
-        })
+        responses.append(
+            {
+                "turn": i,
+                "user": user_message,
+                "assistant": turn_result["response"],
+                "tool_calls": turn_result.get("tool_calls", []),
+            }
+        )
 
         conversation_history = turn_result["conversation_history"]
 
@@ -521,10 +518,8 @@ async def multi_turn_conversation(*messages: str) -> dict:
     return {
         "turns": responses,
         "total_turns": len(responses),
-        "conversation_history": conversation_history
+        "conversation_history": conversation_history,
     }
 
 
-if __name__ == "__main__":
-    logger.info("Starting OpenAI Agent Workflow Service")
-    start()
+app.start()

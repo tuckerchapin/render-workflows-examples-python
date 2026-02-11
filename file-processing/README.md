@@ -183,15 +183,15 @@ Note: You'll need to copy the actual result from `process_file_batch` to test th
 Once deployed, trigger file processing via the Render API or SDK:
 
 ```python
-from render_sdk.client import Client
+from render_sdk import Render
 
-client = Client(api_key="your_render_api_key")
+# Uses RENDER_API_KEY environment variable automatically
+render = Render()
 
 # Process a batch of files
-task_run = client.workflows.run_task(
-    workflow_service_slug="file-processing-workflows",
-    task_name="process_file_batch",
-    input={
+task_run = await render.workflows.run_task(
+    "file-processing-workflows/process_file_batch",
+    {
         "file_paths": [
             "sample_files/sales_data.csv",
             "sample_files/config.json",
@@ -201,17 +201,16 @@ task_run = client.workflows.run_task(
 )
 
 result = await task_run
-print(f"Processed {result['successful']}/{result['total_files']} files")
+print(f"Processed {result.results['successful']}/{result.results['total_files']} files")
 
 # Generate consolidated report
-report_run = client.workflows.run_task(
-    workflow_service_slug="file-processing-workflows",
-    task_name="generate_consolidated_report",
-    input={"batch_result": result}
+report_run = await render.workflows.run_task(
+    "file-processing-workflows/generate_consolidated_report",
+    {"batch_result": result.results}
 )
 
 report = await report_run
-print(f"Report: {report['summary']}")
+print(f"Report: {report.results['summary']}")
 ```
 
 ## Sample Files
@@ -261,7 +260,7 @@ The example includes sample files in `sample_files/`:
 The key to efficient batch processing is using `asyncio.gather()`:
 
 ```python
-@task
+@app.task
 async def process_file_batch(file_paths: list[str]) -> dict:
     # Launch all file processing tasks concurrently
     tasks = [process_single_file(fp) for fp in file_paths]
@@ -277,13 +276,13 @@ This processes all files simultaneously rather than sequentially, dramatically r
 
 **Add New File Format**:
 ```python
-@task
+@app.task
 def read_xml_file(file_path: str) -> dict:
     # Parse XML file
     # Return structured data
     pass
 
-@task
+@app.task
 def analyze_xml_data(xml_result: dict) -> dict:
     # Analyze XML content
     # Return insights
@@ -294,14 +293,14 @@ def analyze_xml_data(xml_result: dict) -> dict:
 
 **Add Cloud Storage Integration**:
 ```python
-@task
+@app.task
 async def download_from_s3(bucket: str, key: str) -> str:
     # Download file from S3
     # Save to temp location
     # Return local path
     pass
 
-@task
+@app.task
 async def process_s3_batch(bucket: str, keys: list[str]) -> dict:
     # Download files in parallel
     paths = await asyncio.gather(*[download_from_s3(bucket, k) for k in keys])
@@ -311,7 +310,7 @@ async def process_s3_batch(bucket: str, keys: list[str]) -> dict:
 
 **Add Database Export**:
 ```python
-@task
+@app.task
 async def export_to_database(report: dict) -> dict:
     # Connect to database
     # Insert report data

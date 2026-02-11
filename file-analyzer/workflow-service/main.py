@@ -15,9 +15,9 @@ Task Definitions (using Task SDK):
 import logging
 import csv
 import io
-from typing import Any
 from datetime import datetime
-from render_sdk.workflows import start, task, Options, Retry
+
+from render_sdk import Retry, Workflows
 
 # Configure logging
 logging.basicConfig(
@@ -26,8 +26,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Initialize Workflows app with defaults
+app = Workflows(
+    default_retry=Retry(max_retries=2, wait_duration_ms=1000, backoff_scaling=1.5),
+    default_timeout=300,
+    auto_start=True,
+)
 
-@task(options=Options(retry=Retry(max_retries=2, wait_duration_ms=1000)))
+
+@app.task
 def parse_csv_data(file_content: str) -> dict:
     """
     Parse CSV file content into structured data.
@@ -78,7 +85,7 @@ def parse_csv_data(file_content: str) -> dict:
         }
 
 
-@task
+@app.task
 def calculate_statistics(data: dict) -> dict:
     """
     Calculate statistical metrics from parsed data.
@@ -141,7 +148,7 @@ def calculate_statistics(data: dict) -> dict:
     }
 
 
-@task
+@app.task
 def identify_trends(data: dict) -> dict:
     """
     Identify trends and patterns in the data.
@@ -199,7 +206,7 @@ def identify_trends(data: dict) -> dict:
     }
 
 
-@task
+@app.task
 async def generate_insights(stats: dict, trends: dict, metadata: dict) -> dict:
     """
     Generate final insights report combining statistics and trends.
@@ -254,7 +261,7 @@ async def generate_insights(stats: dict, trends: dict, metadata: dict) -> dict:
     return insights
 
 
-@task
+@app.task
 async def analyze_file(file_content: str) -> dict:
     """
     Main orchestrator task for file analysis.
@@ -319,10 +326,3 @@ async def analyze_file(file_content: str) -> dict:
         "insights": insights,
         "completed_at": datetime.now().isoformat()
     }
-
-
-if __name__ == "__main__":
-    logger.info("Starting File Analyzer Workflow Service")
-    logger.info("This service defines tasks that can be called via the Client SDK")
-    logger.info("Tasks available: parse_csv_data, calculate_statistics, identify_trends, generate_insights, analyze_file")
-    start()

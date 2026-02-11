@@ -16,9 +16,8 @@ from multiple sources, enriches it with external APIs, and generates insights
 import asyncio
 import logging
 from datetime import datetime, timedelta
-from typing import Any
 
-from render_sdk.workflows import Options, Retry, start, task
+from render_sdk import Retry, Workflows
 
 # Configure logging
 logging.basicConfig(
@@ -44,11 +43,19 @@ def get_http_client():
     return _http_client
 
 
+# Initialize Workflows app with defaults
+app = Workflows(
+    default_retry=Retry(max_retries=3, wait_duration_ms=2000, backoff_scaling=1.5),
+    default_timeout=300,
+    auto_start=True,
+)
+
+
 # ============================================================================
 # Data Source Tasks - Extract from multiple sources
 # ============================================================================
 
-@task(options=Options(retry=Retry(max_retries=3, wait_duration_ms=2000)))
+@app.task
 async def fetch_user_data(user_ids: list[str]) -> dict:
     """
     Fetch user profile data from user service.
@@ -83,7 +90,7 @@ async def fetch_user_data(user_ids: list[str]) -> dict:
     }
 
 
-@task(options=Options(retry=Retry(max_retries=3, wait_duration_ms=2000)))
+@app.task
 async def fetch_transaction_data(user_ids: list[str], days: int = 30) -> dict:
     """
     Fetch transaction history for users.
@@ -123,7 +130,7 @@ async def fetch_transaction_data(user_ids: list[str], days: int = 30) -> dict:
     }
 
 
-@task(options=Options(retry=Retry(max_retries=3, wait_duration_ms=2000)))
+@app.task
 async def fetch_engagement_data(user_ids: list[str]) -> dict:
     """
     Fetch user engagement metrics.
@@ -167,7 +174,7 @@ async def fetch_engagement_data(user_ids: list[str]) -> dict:
 # Enrichment Tasks - Add additional context
 # ============================================================================
 
-@task
+@app.task
 async def enrich_with_geo_data(user_email: str) -> dict:
     """
     Enrich user data with geographic information.
@@ -192,7 +199,7 @@ async def enrich_with_geo_data(user_email: str) -> dict:
     return geo_data
 
 
-@task
+@app.task
 async def calculate_user_metrics(
     user: dict,
     transactions: list[dict],
@@ -260,7 +267,7 @@ async def calculate_user_metrics(
 # Transformation Tasks - Process and combine data
 # ============================================================================
 
-@task
+@app.task
 async def transform_user_data(
     user_data: dict,
     transaction_data: dict,
@@ -319,7 +326,7 @@ async def transform_user_data(
 # Aggregation Tasks - Generate insights
 # ============================================================================
 
-@task
+@app.task
 def aggregate_insights(enriched_data: dict) -> dict:
     """
     Generate aggregate insights from enriched user data.
@@ -390,7 +397,7 @@ def aggregate_insights(enriched_data: dict) -> dict:
 # Main Pipeline Orchestrator
 # ============================================================================
 
-@task
+@app.task
 async def run_data_pipeline(user_ids: list[str]) -> dict:
     """
     Execute the complete data pipeline.
@@ -486,8 +493,3 @@ async def run_data_pipeline(user_ids: list[str]) -> dict:
             "error": str(e),
             "failed_at": datetime.now().isoformat()
         }
-
-
-if __name__ == "__main__":
-    logger.info("Starting Data Pipeline Workflow Service")
-    start()

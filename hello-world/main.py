@@ -3,7 +3,7 @@ Hello World - Getting Started with Render Workflows
 
 This is the simplest possible workflow example to help you understand the basics.
 It demonstrates:
-- How to define a task using the @task decorator
+- How to define a task using the @app.task decorator
 - How to call a task as a subtask using await
 - How to orchestrate multiple subtask calls
 
@@ -11,7 +11,8 @@ No complex business logic - just simple number operations to show the patterns c
 """
 
 import logging
-from render_sdk.workflows import start, task
+
+from render_sdk import Workflows
 
 # Configure logging to see what's happening
 logging.basicConfig(
@@ -20,12 +21,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Initialize Workflows app with auto_start enabled
+app = Workflows(auto_start=True)
+
 
 # ============================================================================
 # BASIC TASK - The building block
 # ============================================================================
 
-@task
+@app.task
 def double(x: int) -> int:
     """
     A basic task that doubles a number.
@@ -50,7 +54,7 @@ def double(x: int) -> int:
     elif not isinstance(x, int):
         logger.error(f"[TASK] Invalid input type: {type(x)}, value: {x}")
         raise ValueError(f"Expected integer, got: {type(x)}")
-    
+
     logger.info(f"[TASK] Doubling {x}")
     result = x * 2
     logger.info(f"[TASK] Result: {result}")
@@ -61,7 +65,7 @@ def double(x: int) -> int:
 # SUBTASK CALLING - Tasks calling other tasks
 # ============================================================================
 
-@task
+@app.task
 async def add_doubled_numbers(*args: int) -> dict:
     """
     Demonstrates calling a task as a subtask.
@@ -111,7 +115,7 @@ async def add_doubled_numbers(*args: int) -> dict:
 # SUBTASK IN A LOOP - Processing multiple items
 # ============================================================================
 
-@task
+@app.task
 async def process_numbers(*numbers: int) -> dict:
     """
     Demonstrates calling a subtask in a loop.
@@ -157,7 +161,7 @@ async def process_numbers(*numbers: int) -> dict:
 # MULTI-STEP WORKFLOW - Chaining multiple subtasks
 # ============================================================================
 
-@task
+@app.task
 async def calculate_and_process(a: int, b: int, *more_numbers: int) -> dict:
     """
     Demonstrates a multi-step workflow that chains multiple subtasks.
@@ -179,18 +183,18 @@ async def calculate_and_process(a: int, b: int, *more_numbers: int) -> dict:
     # Convert to list for easier handling
     more_numbers_list = list(more_numbers)
     
-    logger.info(f"[WORKFLOW] Starting multi-step workflow")
+    logger.info("[WORKFLOW] Starting multi-step workflow")
 
     # STEP 1: Add two doubled numbers
-    logger.info(f"[WORKFLOW] Step 1: Adding doubled numbers")
+    logger.info("[WORKFLOW] Step 1: Adding doubled numbers")
     step1_result = await add_doubled_numbers(a, b)
 
     # STEP 2: Process a list of numbers
-    logger.info(f"[WORKFLOW] Step 2: Processing number list")
+    logger.info("[WORKFLOW] Step 2: Processing number list")
     step2_result = await process_numbers(*more_numbers_list)
 
     # STEP 3: Combine the results
-    logger.info(f"[WORKFLOW] Step 3: Combining results")
+    logger.info("[WORKFLOW] Step 3: Combining results")
     final_result = {
         "step1_sum": step1_result["sum_of_doubled"],
         "step2_doubled": step2_result["doubled_numbers"],
@@ -198,40 +202,5 @@ async def calculate_and_process(a: int, b: int, *more_numbers: int) -> dict:
         "summary": f"Added doubled {a} and {b}, then doubled {len(more_numbers_list)} more numbers"
     }
 
-    logger.info(f"[WORKFLOW] Multi-step workflow complete")
+    logger.info("[WORKFLOW] Multi-step workflow complete")
     return final_result
-
-
-# ============================================================================
-# START THE WORKFLOW SERVICE
-# ============================================================================
-
-if __name__ == "__main__":
-    """
-    This starts the workflow service and registers all tasks defined above.
-
-    When you run 'python main.py', this will:
-    1. Register all @task decorated functions
-    2. Start the workflow service
-    3. Wait for task executions from Render
-
-    The tasks can then be called:
-    - Via the Render Dashboard (Manual Run)
-    - Via the Render API
-    - Via the Client SDK from another service
-    """
-    logger.info("=" * 80)
-    logger.info("Starting Hello World Workflow Service")
-    logger.info("=" * 80)
-    logger.info("")
-    logger.info("Registered tasks:")
-    logger.info("  - double(x)")
-    logger.info("  - add_doubled_numbers(a, b)")
-    logger.info("  - process_numbers(numbers)")
-    logger.info("  - calculate_and_process(a, b, more_numbers)")
-    logger.info("")
-    logger.info("Ready to accept task executions!")
-    logger.info("=" * 80)
-
-    # Start the workflow service
-    start()

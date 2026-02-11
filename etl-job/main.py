@@ -16,9 +16,8 @@ import csv
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
-from render_sdk.workflows import Options, Retry, start, task
+from render_sdk import Retry, Workflows
 
 # Configure logging
 logging.basicConfig(
@@ -27,12 +26,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Initialize Workflows app with defaults
+app = Workflows(
+    default_retry=Retry(max_retries=3, wait_duration_ms=1000, backoff_scaling=1.5),
+    default_timeout=300,
+    auto_start=True,
+)
+
 
 # ============================================================================
 # EXTRACT Tasks
 # ============================================================================
 
-@task(options=Options(retry=Retry(max_retries=3, wait_duration_ms=1000)))
+@app.task
 def extract_csv_data(file_path: str) -> list[dict]:
     """
     Extract data from a CSV file.
@@ -51,7 +57,7 @@ def extract_csv_data(file_path: str) -> list[dict]:
     try:
         path = Path(file_path)
         if not path.exists():
-            logger.warning(f"[EXTRACT] File not found, using sample data")
+            logger.warning("[EXTRACT] File not found, using sample data")
             # In production, this would read from cloud storage or database
             return [
                 {"id": "1", "name": "Alice", "email": "alice@example.com", "age": "28", "country": "USA"},
@@ -76,7 +82,7 @@ def extract_csv_data(file_path: str) -> list[dict]:
 # TRANSFORM Tasks
 # ============================================================================
 
-@task
+@app.task
 def validate_record(record: dict) -> dict:
     """
     Validate and clean a single data record.
@@ -137,7 +143,7 @@ def validate_record(record: dict) -> dict:
     return cleaned_record
 
 
-@task
+@app.task
 async def transform_batch(records: list[dict]) -> dict:
     """
     Transform a batch of records by validating each one.
@@ -187,7 +193,7 @@ async def transform_batch(records: list[dict]) -> dict:
 # LOAD Tasks
 # ============================================================================
 
-@task
+@app.task
 def compute_statistics(valid_records: list[dict]) -> dict:
     """
     Compute statistical insights from validated records.
@@ -237,7 +243,7 @@ def compute_statistics(valid_records: list[dict]) -> dict:
         'timestamp': datetime.now().isoformat()
     }
 
-    logger.info(f"[LOAD] Statistics computed successfully")
+    logger.info("[LOAD] Statistics computed successfully")
     logger.info(f"[LOAD] Countries: {list(country_counts.keys())}")
     if age_stats:
         logger.info(f"[LOAD] Age range: {age_stats['min']}-{age_stats['max']}")
@@ -249,7 +255,7 @@ def compute_statistics(valid_records: list[dict]) -> dict:
 # MAIN ETL Pipeline
 # ============================================================================
 
-@task
+@app.task
 async def run_etl_pipeline(source_file: str) -> dict:
     """
     Complete ETL pipeline orchestrating extract, transform, and load operations.
@@ -328,8 +334,3 @@ async def run_etl_pipeline(source_file: str) -> dict:
             'error': str(e),
             'failed_at': datetime.now().isoformat()
         }
-
-
-if __name__ == "__main__":
-    logger.info("Starting ETL Job Workflow Service")
-    start()

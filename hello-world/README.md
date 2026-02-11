@@ -5,7 +5,7 @@ The simplest possible workflow example to help you understand the basics of Rend
 ## What You'll Learn
 
 This example teaches the fundamental concepts:
-- **What is a Task?** - A function decorated with `@task` that can be executed as a workflow
+- **What is a Task?** - A function decorated with `@app.task` that can be executed as a workflow
 - **What is a Subtask?** - A task called by another task using `await`
 - **How to Orchestrate** - Combining multiple tasks to create workflows
 - **How to Deploy** - Getting your first workflow running on Render
@@ -31,10 +31,14 @@ calculate_and_process (multi-step orchestrator)
 
 ### What is a Task?
 
-A **task** is simply a Python function decorated with `@task`. It becomes a workflow step that Render can execute:
+A **task** is simply a Python function decorated with `@app.task`. It becomes a workflow step that Render can execute:
 
 ```python
-@task
+from render_sdk import Workflows
+
+app = Workflows(auto_start=True)
+
+@app.task
 def double(x: int) -> int:
     """A simple task that doubles a number"""
     return x * 2
@@ -45,7 +49,7 @@ def double(x: int) -> int:
 A **subtask** is when one task calls another task using `await`. This is how you compose workflows:
 
 ```python
-@task
+@app.task
 async def add_doubled_numbers(a: int, b: int) -> dict:
     # Call 'double' as a subtask using await
     doubled_a = await double(a)  # ← This is a subtask call!
@@ -229,25 +233,26 @@ This is the most complex example - it calls `add_doubled_numbers` and `process_n
 Once deployed, trigger workflows via the Render Client SDK:
 
 ```python
-from render_sdk.client import Client
+from render_sdk import Render
 
-client = Client(api_key="your_render_api_key")
+# Uses RENDER_API_KEY environment variable automatically
+render = Render()
 
 # Call the simple double task
-task_run = client.workflows.run_task(
+task_run = await render.workflows.run_task(
     "hello-world-workflows/double",
-    [5]  # x=5
+    {"x": 5}
 )
 result = await task_run
-print(f"Result: {result}")  # Output: 10
+print(f"Result: {result.results}")  # Output: 10
 
 # Call the subtask orchestration example
-task_run = client.workflows.run_task(
+task_run = await render.workflows.run_task(
     "hello-world-workflows/add_doubled_numbers",
-    [3, 4]  # a=3, b=4
+    {"a": 3, "b": 4}
 )
 result = await task_run
-print(f"Sum of doubled: {result['sum_of_doubled']}")  # Output: 14
+print(f"Sum of doubled: {result.results['sum_of_doubled']}")  # Output: 14
 ```
 
 ## Tasks Explained
@@ -319,14 +324,16 @@ step2 = await process_numbers(numbers)     # ← Second subtask
 
 ## Key Concepts
 
-### The `@task` Decorator
+### The `@app.task` Decorator
 
-Every workflow function needs the `@task` decorator:
+Every workflow function needs the `@app.task` decorator:
 
 ```python
-from render_sdk.workflows import task
+from render_sdk import Workflows
 
-@task
+app = Workflows(auto_start=True)
+
+@app.task
 def my_task():
     return "Hello World"
 ```
@@ -336,7 +343,7 @@ def my_task():
 Tasks that call other tasks as subtasks must be `async`:
 
 ```python
-@task
+@app.task
 async def orchestrator():
     result = await subtask()  # ← Calls another task
     return result
@@ -354,7 +361,7 @@ Without `await`, you're just calling a regular Python function!
 
 ### Task Registration
 
-When you run `start()`, all `@task` decorated functions are automatically registered and become available as workflow tasks.
+When you use `Workflows(auto_start=True)`, all `@app.task` decorated functions are automatically registered and become available as workflow tasks.
 
 ## Common Patterns
 
@@ -363,7 +370,7 @@ When you run `start()`, all `@task` decorated functions are automatically regist
 Execute subtasks one after another:
 
 ```python
-@task
+@app.task
 async def sequential():
     step1 = await task_a()
     step2 = await task_b(step1)  # Uses result from step1
@@ -376,7 +383,7 @@ async def sequential():
 Execute subtasks where order doesn't matter:
 
 ```python
-@task
+@app.task
 async def independent():
     result_a = await task_a()
     result_b = await task_b()
@@ -388,7 +395,7 @@ async def independent():
 Process a list by calling a subtask for each item:
 
 ```python
-@task
+@app.task
 async def batch_process(items: list):
     results = []
     for item in items:
@@ -402,15 +409,15 @@ async def batch_process(items: list):
 Subtasks can call other subtasks:
 
 ```python
-@task
+@app.task
 async def level_1():
     return await level_2()
 
-@task
+@app.task
 async def level_2():
     return await level_3()
 
-@task
+@app.task
 def level_3():
     return "Done!"
 ```
@@ -437,7 +444,7 @@ Make sure:
 ### Import errors
 
 Make sure:
-- `requirements.txt` includes `render-sdk>=0.1.0`
+- `requirements.txt` includes `render-sdk>=0.2.0`
 - Build command is running correctly
 - Python version is 3.10 or higher
 
@@ -446,7 +453,7 @@ Make sure:
 Make sure:
 - Your task function is marked `async`
 - You're using `await` before the task call
-- Both tasks are decorated with `@task`
+- Both tasks are decorated with `@app.task`
 
 ## Important Notes
 

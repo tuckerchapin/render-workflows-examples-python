@@ -36,12 +36,14 @@ A **task** is simply a Python function decorated with `@app.task`. It becomes a 
 ```python
 from render_sdk import Workflows
 
-app = Workflows(auto_start=True)
+app = Workflows()
 
 @app.task
 def double(x: int) -> int:
     """A simple task that doubles a number"""
     return x * 2
+
+app.start()
 ```
 
 ### What is a Subtask?
@@ -331,11 +333,13 @@ Every workflow function needs the `@app.task` decorator:
 ```python
 from render_sdk import Workflows
 
-app = Workflows(auto_start=True)
+app = Workflows()
 
 @app.task
 def my_task():
     return "Hello World"
+
+app.start()
 ```
 
 ### The `async` Keyword
@@ -361,7 +365,7 @@ Without `await`, you're just calling a regular Python function!
 
 ### Task Registration
 
-When you use `Workflows(auto_start=True)`, all `@app.task` decorated functions are automatically registered and become available as workflow tasks.
+All `@app.task` decorated functions are registered when defined. Call `app.start()` at the end of your module to start the workflow service and make all registered tasks available for execution.
 
 ## Common Patterns
 
@@ -444,7 +448,7 @@ Make sure:
 ### Import errors
 
 Make sure:
-- `requirements.txt` includes `render-sdk>=0.2.0`
+- `requirements.txt` includes `render-sdk>=0.5.0`
 - Build command is running correctly
 - Python version is 3.10 or higher
 

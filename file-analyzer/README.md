@@ -524,11 +524,13 @@ print(result.results)  # Return value from task
 ```python
 from render_sdk import Workflows
 
-app = Workflows(auto_start=True)
+app = Workflows()
 
 @app.task
 def my_task(param: str) -> dict:
     return {"result": param}
+
+app.start()
 ```
 
 ### 3. Service Separation

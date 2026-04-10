@@ -1,6 +1,7 @@
 from render_sdk import Workflows, Retry
 import asyncio
 import random
+import urllib.request
 
 app = Workflows()
 
@@ -30,6 +31,12 @@ def flip_coin() -> str:
     if random.random() < 0.5:
         raise Exception("Flipped tails! Retrying.")
     return "Flipped heads!"
+
+
+@app.task
+def get_ip() -> str:
+    with urllib.request.urlopen("https://ifconfig.me") as response:
+        return response.read().decode("utf-8").strip()
 
 
 if __name__ == "__main__":
